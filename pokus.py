@@ -176,9 +176,18 @@ print('feature : importance')
 for feature, importance in feature_importances:
     print(f'{feature} : {"%0.2f" % importance} ')
 
+#calculate cummulative feature importances from the biggest to the smallest
+cumulative_importances = np.cumsum([importance for feature, importance in feature_importances])
+
+#print them
+print('feature : importance')
+for i, importance in enumerate(cumulative_importances):
+    print(f'{feature_importances[i][0]} : {"%0.2f" % importance} ')
+
+
 features_sorted = [feature_importances[i][0] for i in range(len(feature_importances))]
 
-"""
+
 for i in range(len(features_sorted)):
     selected_features = features_sorted[: i + 1]
     X = train[selected_features]
@@ -191,27 +200,14 @@ for i in range(len(features_sorted)):
     predictions = model.predict(X_test)
     accuracy = accuracy_score(y_test, predictions)
     print(f"For first {i + 1} most important features: Accuracy: %.2f%%" % (accuracy * 100))
-"""
+
 print()
 print('As we can see, keeping 10 of the most important features might be optimal')
 print('Which are these:')
 
 the_important_features = features_sorted[:10]
+print(the_important_features)
 
-X = train[the_important_features]
-Y = train.loc[:, col_target]
-X_train, X_test, y_train, y_test = train_test_split(X, Y, test_size=0.2, random_state=1)
-model = XGBClassifier()
-model.fit(X_train, y_train)
-prediction = model.predict(X_test)
-accuracy = accuracy_score(prediction, y_test)
-print("Accuracy on testing train using only 10 most important features: %.2f%%" % (accuracy * 100))
-
-
-# Tune max_depth and min_child_weight.
-from sklearn.model_selection import RandomizedSearchCV
-
-# According to internet, parameters from those intervals are reasonable
 param_grid = {
     'max_depth': [3, 5, 7, 9, 11, 13],
     'min_child_weight': [1, 3, 5],
@@ -223,69 +219,20 @@ param_grid = {
     'reg_alpha': [5e-2, 4e-2, 2e-2, 1e-2, 3e-2]
 }
 
-starting_grid = {
- 'max_depth':[7],
- 'min_child_weight':[1],
-    'gamma': [8/10],
-    'subsample': [9/10],
-    'colsample_bytree': [7/10],
-    'learning_rate': [0.05],
-    'n_estimators': [150],
-    'reg_alpha': [5e-2]
-}
 
+# RandomizedSearchCV
 
-skutecny_grid = {
- 'max_depth':7,
- 'min_child_weight':1,
-    'gamma': 8/10,
-    'subsample': 9/10,
-    'colsample_bytree': 7/10,
-    'learning_rate': 0.05,
-    'n_estimators': 150,
-    'reg_alpha': 5e-2
-}
+# Define the model
+model = XGBClassifier()
 
+# Define the randomized search
+random_search = RandomizedSearchCV(model, param_distributions=param_grid, n_iter=100_000, cv=5, scoring='roc_auc', n_jobs=-1, verbose=2, random_state=42)
 
+# Perform the randomized search
 X = train[the_important_features]
 Y = train.loc[:, col_target]
-X_train, X_test, y_train, y_test = train_test_split(X, Y, test_size=0.2, random_state=1)
-model = XGBClassifier(**skutecny_grid)
-model.fit(X_train, y_train)
-prediction = model.predict(X_test)
-accuracy = accuracy_score(prediction, y_test)
-print("accuracy of the 1st fake grid is")
-print(accuracy)
+random_search.fit(X, Y)
 
-def change_param(data,new_data,param):
-    data[param] = new_data[param]
-    return data
-
-best_params = {}
-for param in list(param_grid):
-    grid = change_param(starting_grid.copy(), param_grid.copy(), param)
-
-    model = XGBClassifier()
-
-    grid_search = GridSearchCV(model, grid, cv=5, scoring='roc_auc', n_jobs=-1, verbose=2)
-
-    grid_search.fit(X, Y)
-
-    best_params[param] = grid_search.best_params_[param]
-
-X = train.loc[:, train.columns != col_target ]
-Y = train.loc[:, col_target]
-X_train, X_test, y_train, y_test = train_test_split(X, Y, test_size=0.2,random_state=1)
-model = XGBClassifier(**best_params)
-model.fit(X_train, y_train)
-prediction = model.predict(X_test)
-accuracy = accuracy_score(prediction, y_test)
-print(f'starting accuracy is {accuracy}')
-print(f'the optimal values for max depth and min child weight are {best_params}')
-
-
-#nejlepsi model je
-# {'max_depth': 9, 'min_child_weight': 1, 'gamma': 0.2, 'subsample': 0.8, 'colsample_bytree': 0.9, 'learning_rate': 0.1, 'n_estimators': 350, 'reg_alpha': 0.05}
-# accuracy modelu = 0.755689
-
-
+# Print the best parameters and the best score
+print(random_search.best_params_)
+print(random_search.best_score_)
